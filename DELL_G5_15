@@ -1,0 +1,135 @@
+Setup for DELL G5 15 laptop with NVidia card (Optimus). Used in e-cinema video projection and OBS streaming with multiple preview windows.
+Running on KDE Plasma for elegant window manipulation. Gnome would be candidate, if fullscreen video would not get also shrunk when Activities are
+invoked and window moving would not invoke animations even when disabled (try moving fullscreen video between workspaces). Mate with Macro does not 
+compose windows outside current workspace, so OBS capture is not working; with Compiz window decorations and most basic functionalities just 
+disappered under current versions, so there might be alternative, but not tested. i3 I found difficult to orient it, so I run away from. So KDE Plasma with Kwin...
+
+Current settings fixes for me microstuttering and tearing, video appers to be fluid and window manipulation does not disturb it.
+
+First:
+Install your disto - I used Debian and Pop_OS!. Debian needs to be installed with non-free packages and then I updated to sid and installed NVidia proprietary drivers.
+On sid there might be miss-match between kernel supported by NVidia and current sid kernel, so maybe try installing NVidia drivers from websites (can be pain if not 
+installed on clean system). Pop_OS! comes with NVidia out of box if you choose that image and can also be helpful with graphics switching - and might not have the same
+compatibility issues like Debian from miss-matched packages (but that might also be my stupidity).
+
+After installing drivers there needs to be xorg.conf entry setup. My currently running on Debian is:
+
+/etc/X11/xorg.conf
+
+#################################
+Section "ServerLayout"
+    Identifier "layout"
+    Screen 0 "nvidia"
+    Inactive "intel"
+EndSection
+
+Section "Device"
+    Identifier "intel"
+    Driver "modesetting"
+    BusID  "PCI:0:2:0"
+    Option "AccelMethod" "none"
+EndSection
+
+Section "Device"
+    Identifier "nvidia"
+    Driver "nvidia"
+    BusID "PCI:1:0:0"
+    Option         "TripleBuffer"  "On"
+EndSection
+
+Section "Screen"
+    Identifier "nvidia"
+    Device "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option         "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
+    Option         "AllowIndirectGLXProtocol" "off"
+    Option         "TripleBuffer" "on"
+
+EndSection
+
+Section "Screen"
+    Identifier "intel"
+    Device "intel"
+    Option         "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
+    Option         "AllowIndirectGLXProtocol" "off"
+    Option         "TripleBuffer" "on"
+EndSection
+
+######################################
+
+
+There might be redundancies, but it works for now. This also disables the Laptop monitor, because it is primary powered by iGPU, so you need to invoke this at startup of lightdm,
+which needs to be installed on Debian (sudo apt install lightdm) and configured as primary. Pop_OS! deals with this on its own, so no need for this setup and for lightdm.
+
+#######################################
+
+xrandr --output eDP-1-1 --set "PRIME Synchronization" 1
+xrandr --setprovideroutputsource modesetting NVIDIA-0
+xrandr --auto
+
+#######################################
+
+Create a script in /etc/lightdm/ (e.g. sudo nano /etc/lightdm/nvidia.sh; sudo chmod +x /etc/lighdm/nvidia.sh ) with the xrandr content above in. Then add this script to
+/etc/lightdm/ligthdm.conf under SeatDefaults.
+
+######################################
+
+[SeatDefaults]
+display-setup-script=/etc/lightdm/nvidia.sh
+
+######################################
+
+Now you can restart and you should be able to get into lightdm on laptop screen. Hopefully...
+
+Next install KDE and Plasma. For Debian it is sudo apt install plasma-desktop task-desktop kde-full. Same should work for Pop_OS!
+
+After that, if succesful, you should be able to log into Plasma session. I like to invoke
+
+xrandr --output eDP-1-1 --set "PRIME Synchronization" 1
+
+after the start, just in case the lightdm is not ready for this yet. If external monitor is connected, in nvidia-settings under X Server Display Configuration, if you select external display
+and hit advanced, you should be able to check (if not checked already) Force composition pipeline - this helps usually with VSync and tearing. 
+
+Kwin is KDE Plasma window manager and compositor, so few tearing and stutters problems can be fixed with fixing kwin. Hack is to open ~/.config/kwin, replace [Compositing] 
+section and add following:
+
+#####################################
+
+[Compositing]
+AnimationSpeed=0
+Backend=XRender
+Enabled=true
+GLCore=false
+GLPreferBufferSwap=n
+GLTextureFilter=2
+HiddenPreviews=6
+MaxFPS=360
+OpenGLIsUnsafe=false
+OpenGLIsUnsafe0=false
+OpenGLIsUnsafe1=false
+RefreshRate=360
+WindowsBlockCompositing=false
+XRenderSmoothScale=false
+
+######################################
+
+This changes also default rendering to XRender, which for some reason is most stable for me on KDE and plays nicely with NVidia. This settings - except RefreshRate and MaxFPS - can
+also be tinkered with in Compositor settings in System settings app. The RefreshRate and MaxFPS set here might be overkill, but there is actually not much taxing on my system
+from these. Supposedly kwin uses timer not in sync with VSync, so this forces it to refresh the buffer more frequently. I use 60Hz and 75Hz displays and it works fine. Only 
+the VSync setting needs to be disabled and handled by nvidia, or there is gonna be loads of stuttering and rendering issues. (I did not test this on intel iGPU yet, because
+it is disabled for now.)
+
+Kwin also may benefit from disabling triple buffering in /etc/profile.d/kwin.sh. I cannot verify just yet.
+
+/etc/profile.d/kwin.sh
+#####################################
+#forces off
+export KWIN_TRIPLE_BUFFER=0
+
+#####################################
+#forces on
+export KWIN_TRIPLE_BUFFER=1
+
+#####################################
+
+
